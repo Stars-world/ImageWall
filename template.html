@@ -1,304 +1,668 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="light">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>最简洁照片墙（白底 · 全宽 · 行高=屏幕1/4）</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>今日照片墙</title>
+
+  <!--
+    ★ 使用说明（可快速修改的参数）
+    1) 页面边距（左右）、行间距（图片间隙）：
+       :root 里的 --page-x、--gap
+
+    2) 标题与时间字号：
+       :root 里的 --title-size、--time-size
+
+    3) 预览层左右点击热区的“上下留白 + 区域宽度”：
+       :root 里的 --nav-inset-v（上下留白，建议 8~12vh）
+       :root 里的 --nav-zone-w（左右热区宽度，建议 20~30vw）
+
+    4) 关闭按钮 X 的大小：
+       .close-btn .icon-x 的 width/height
+
+    5) 模式按钮（chip）的颜色：
+       :root 或 html[data-theme="dark"] 中的 --chip-* 变量
+
+    6) 照片墙每行目标高度（控制行高/缩放）：
+       JS 中 const options = { targetRowHeight: ... }   // 搜索“targetRowHeight // 修改这里”
+
+    7) 主题切换按钮显示的图标与主题：
+       JS 中 applyTheme / themeBtn 点击事件
+  -->
+
   <style>
-    /* —— 主题变量（来自参考.html，扩展到本模板） —— */
-    :root{
-      --gap: 8px;           /* 图片间距 */
-      --page-x: 12px;       /* 页面左右留白 */
+    /* ===== 全局变量（常改项） ===== */
+    :root {
+      /* 布局与尺寸 */
+      --gap: 8px;                 /* 图片之间的水平/垂直间隙 —— 修改这里 */
+      --page-x: 12px;             /* 页面左右留白（wrap 的 padding）—— 修改这里 */
 
-      /* 主题色（亮） */
-      --bg:#ffffff; --fg:#111; --card-bg:#fff; --muted:#666;
-      --overlay-bg:rgba(255,255,255,.92); --overlay-fg:#111;
-      --btn-bg:rgba(0,0,0,.06); --btn-border:rgba(0,0,0,.12);
+      --title-size: 20px;         /* 标题字号 —— 修改这里 */
+      --time-size: 14px;          /* 时间字号 —— 修改这里 */
+
+      --nav-inset-v: 32%;        /* 预览左右热区的上下留白 —— 修改这里 */
+      --nav-zone-w: 10%;         /* 预览左右热区的宽度（最大值受 max-width 限制）—— 修改这里 */
+      --nav-zone-max-w: 520px;    /* 预览左右热区最大宽度（防止超宽） */
+
+      --close-btn-size: 3.2vw;     /* 关闭按钮内 SVG X 的宽高 —— 修改这里 */
+      --close-btn-icon-size: 30px; /* 关闭按钮内 SVG X 的宽高 —— 修改这里 */
+
+      /* 主题（亮） */
+      --bg: #ffffff; --fg: #111; --muted: #666;
+      --overlay-bg: rgba(255,255,255,.92); --overlay-fg: #111;
+      --btn-bg: rgba(0,0,0,.06); --btn-border: rgba(0,0,0,.12);
+
+      /* Chip（模式按钮）颜色 —— 修改这里 */
+      --chip-bg: #f2f4f7; --chip-fg: #222; --chip-border: #e6e8ec;
+      --chip-active-bg: #111; --chip-active-fg: #fff; --chip-active-border: #111;
+
+      /* 关闭按钮的背景/边框 */
+      --close-bg: rgba(0,0,0,.06);
+      --close-border: rgba(255,255,255,.15);
     }
-    html[data-theme="dark"]{
-      --bg:#0b0b0b; --fg:#eaeaea; --card-bg:#121212; --muted:#9a9a9a;
-      --overlay-bg:rgba(0,0,0,.85); --overlay-fg:#fff;
-      --btn-bg:rgba(255,255,255,.12); --btn-border:rgba(255,255,255,.18);
+
+    html[data-theme="dark"] {
+      --bg: #0b0b0b; --fg: #eaeaea; --muted: #9a9a9a;
+      --overlay-bg: rgba(0,0,0,.85); --overlay-fg: #fff;
+      --btn-bg: rgba(255,255,255,.12); --btn-border: rgba(255,255,255,.18);
+
+      /* Chip（模式按钮）颜色（暗色）—— 如需不同风格在这里改 */
+      --chip-bg: #1b1f24; --chip-fg: #d2d7df; --chip-border: #2a3139;
+      --chip-active-bg: #fff; --chip-active-fg: #000; --chip-active-border: #fff;
+
+      --close-bg: rgba(255,255,255,.08);
+      --close-border: rgba(255,255,255,.12);
     }
 
-    *{box-sizing:border-box}
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    /* ===== 重置与基础 ===== */
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial;
+    }
 
-    /* 顶部信息区（标题 + 时间 + 主题切换） */
-    .wrap{
-      width:100%;
-      margin:0 auto;
+    .wrap {
+      width: 100%;
+      margin: 0 auto;
       padding: 12px var(--page-x);
     }
-    .topbar{position:relative;display:flex;align-items:center;min-height:36px}
-    .title{ font-size:20px;font-weight:700;letter-spacing:.5px;margin:6px 0 6px;padding-right:56px; }
-    .time{ font-size:14px; color:var(--muted); margin: 2px 0 10px; }
 
-    .theme-toggle{
-      position:absolute;top:0;right:0;width:36px;height:36px;border-radius:999px;
-      background:var(--btn-bg);color:var(--fg);display:grid;place-items:center;
-      font-size:18px;cursor:pointer;user-select:none;border:1px solid var(--btn-border);
-      backdrop-filter:blur(3px);z-index:1;
+    /* ===== 顶部栏：标题 + 时间 + 主题按钮 ===== */
+    .topbar {
+      position: relative;
+      display: flex;
+      align-items: center;
+      min-height: 36px;
     }
-    .theme-toggle:hover{filter:brightness(1.05)}
+    .title {
+      font-size: var(--title-size);   /* ← 标题字号在 :root 可调 */
+      font-weight: 700;
+      letter-spacing: .5px;
+      margin: 6px 0 6px;
+      padding-right: 56px;            /* 给右侧主题切换按钮留出空间 */
+    }
+    .time {
+      font-size: var(--time-size);    /* ← 时间字号在 :root 可调 */
+      color: var(--muted);
+      margin: 2px 0 10px;
+    }
 
-    /* 照片墙容器 */
-    .gallery{ padding:6px; overflow:hidden; min-height:60px; }
-    .row{ display:flex; gap:var(--gap); margin-bottom:var(--gap); }
-    .row:last-child{ margin-bottom:2px; }
-    .cell{ position:relative; overflow:hidden; border-radius:6px; background:#f3f3f3; flex:0 0 auto; cursor:zoom-in; }
-    .cell img{ width:100%; height:100%; display:block; object-fit:cover; user-select:none; -webkit-user-drag:none; }
+    .theme-toggle {
+      position: absolute;
+      top: 0; right: 0;
+      width: 36px; height: 36px;
+      border-radius: 999px;
+      background: var(--btn-bg);
+      color: var(--fg);
+      display: grid; place-items: center;
+      font-size: 18px;
+      cursor: pointer;
+      user-select: none;
+      border: 1px solid var(--btn-border);
+      backdrop-filter: blur(3px);
+      z-index: 1;
+    }
+    .theme-toggle:hover { filter: brightness(1.05); }
 
-    .loading{ padding:20px 0; text-align:center; opacity:.7; }
+    /* ===== 模式切换（排序）Chip ===== */
+    .modebar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 8px 0 12px;
+    }
+    .mode-btn {
+      border: 1px solid var(--chip-border);
+      background: var(--chip-bg);
+      color: var(--chip-fg);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .mode-btn.active {
+      background: var(--chip-active-bg);
+      color: var(--chip-active-fg);
+      border-color: var(--chip-active-border);
+    }
 
-    /* 预览层（来自参考.html） */
-    .lightbox{
-      position:fixed;inset:0;background:var(--overlay-bg);
-      display:none;align-items:center;justify-content:center;z-index:10000;padding:24px;
+    /* ===== 照片墙（Justified 布局容器） ===== */
+    .gallery {
+      padding: 6px;
+      overflow: hidden;
+      min-height: 60px;
     }
-    .lightbox.open{display:flex}
-    .lightbox img{
-      max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 2px 24px rgba(0,0,0,.6);
+    .row {
+      display: flex;
+      gap: var(--gap);                /* ← 图片之间间隙在 :root 可调 */
+      margin-bottom: var(--gap);
     }
-    .close-btn{
-      position:fixed;top:14px;right:14px;width:36px;height:36px;border-radius:999px;
-      background:transparent;color:var(--overlay-fg);display:grid;place-items:center;
-      font-size:20px;cursor:pointer;user-select:none;border:1px solid rgba(255,255,255,.25);z-index:10001;
+    .row:last-child { margin-bottom: 2px; }
+    .cell {
+      position: relative;
+      overflow: hidden;
+      border-radius: 6px;
+      background: #f3f3f3;
+      flex: 0 0 auto;
+      cursor: zoom-in;
     }
-    .preview-open .theme-toggle{pointer-events:none;opacity:.6}
+    .cell img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
 
-    @media (max-width:520px){
-      :root{ --gap:6px; --page-x:10px }
-      .wrap{ padding-top:10px }
-      .title{ font-size:18px }
+    .loading { padding: 20px 0; text-align: center; opacity: .7; }
+
+    /* ===== 预览层（Lightbox） ===== */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: var(--overlay-bg);
+      display: none;                  /* 通过 .open 切换显示 */
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 24px;
     }
+    .lightbox.open { display: flex; }
+
+    .lightbox img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 2px 24px rgba(0,0,0,.6);
+    }
+
+    /* 预览层左右导航热区：上下留白与宽度都由变量控制 */
+    .nav-zone {
+      position: fixed;
+      top: var(--nav-inset-v);                      /* ← 上下留白 —— 修改这里 */
+      bottom: var(--nav-inset-v);                   /* ← 上下留白 —— 修改这里 */
+      width: var(--nav-zone-w);                     /* ← 热区宽度 —— 修改这里 */
+      max-width: var(--nav-zone-max-w);
+
+      display: flex; align-items: center; justify-content: center;
+      color: var(--overlay-fg);
+      background: transparent;      /* 点击区透明 */
+      cursor: pointer; user-select: none;
+      z-index: 10000;               /* 比图片高，低于关闭按钮 */
+      transition: background .2s ease;
+    }
+    .nav-left  { left: 0;  }
+    .nav-right { right: 0; }
+
+    .nav-zone:hover { background: rgba(0,0,0,.10); }
+    html[data-theme="light"] .nav-zone:hover { background: rgba(0,0,0,.06); }
+
+    .nav-zone .arrow {
+      font-size: 44px;              /* ← 箭头字号。如需变大/变小改这里 */
+      line-height: 1;
+      opacity: .85;
+      text-shadow: 0 2px 6px rgba(0,0,0,.35);
+      pointer-events: none;         /* 点击穿透到热区 */
+    }
+
+    /* 小屏优化 */ /* 小屏标题略小 *//* 小屏热区更宽易点中 */
+    @media (max-width: 520px) {
+      :root { --gap: 6px; --page-x: 10px; --close-btn-size: 50px; --close-btn-icon-size: 24px; }
+      .wrap { padding-top: 10px; }
+      .title { font-size: 18px; }   
+      .nav-zone { width: 15%; top:25%; bottom:25%; }    
+      .nav-zone .arrow { font-size: 36px; }
+
+
+    }
+
+    /* 关闭按钮（置顶） */
+    .close-btn {
+      position: fixed;
+      top: 14px; right: 10vw;        /* 可按需调整位置 */
+      width: var(--close-btn-size); height: var(--close-btn-size);       /* 外层容器尺寸（相对屏宽） */
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--close-bg);
+      color: var(--overlay-fg);       /* 影响 SVG 的颜色 */
+      border: 1px solid var(--close-border);
+      cursor: pointer; user-select: none; z-index: 10001;
+    }
+    .close-btn .icon-x {
+      width: var(--close-btn-icon-size);   /* ← X 的宽高 —— 修改这里 */
+      height: var(--close-btn-icon-size);
+    }
+
+    /* 预览开启时让主题按钮不可交互 */
+    .preview-open .theme-toggle { pointer-events: none; opacity: .6; }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <!-- 顶部：标题 + 主题切换按钮 -->
-  <div class="topbar">
-    <h1 class="title" id="pageTitle">标题占位</h1>
-    <div class="theme-toggle" id="themeToggle" title="切换主题" aria-label="切换主题">🌙</div>
+  <div class="wrap">
+    <!-- 顶部：标题 + 主题按钮 + 时间 -->
+    <div class="topbar">
+      <h1 class="title" id="pageTitle">叫什么好呢</h1>
+      <div class="theme-toggle" id="themeToggle" title="切换主题" aria-label="切换主题">🌙</div>
+    </div>
+    <div class="time" id="time">宇宙的起源</div>
+
+    <!-- 模式切换（排序） -->
+    <div class="modebar" id="modebar" role="tablist" aria-label="排序">
+      <button class="mode-btn active" data-mode="update" role="tab" aria-selected="true">update time</button>
+      <button class="mode-btn" data-mode="hentai" role="tab">hentai</button>
+      <button class="mode-btn" data-mode="porn" role="tab">porn</button>
+      <button class="mode-btn" data-mode="sexy" role="tab">sexy</button>
+    </div>
+
+    <!-- 照片墙 -->
+    <div id="gallery" class="gallery">
+      <div id="loading" class="loading">正在加载…</div>
+    </div>
   </div>
-  <div class="time" id="time">时间占位</div>
 
-  <!-- 照片墙 -->
-  <div id="gallery" class="gallery">
-    <div id="loading" class="loading">正在准备图片尺寸并计算排版…</div>
+  <!-- 预览层（Lightbox） -->
+  <div class="lightbox" id="lightbox" aria-hidden="true">
+    <img id="bigimg" alt="preview" referrerpolicy="no-referrer" />
+    <div class="close-btn" id="closeBtn" aria-label="关闭">
+      <!-- X 图标大小由 CSS 变量 --close-btn-size 控制 -->
+      <svg class="icon-x" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M18 6L6 18M6 6l12 12"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+    </div>
+    <div class="nav-zone nav-left"  id="navPrev" aria-label="上一张"><span class="arrow">‹</span></div>
+    <div class="nav-zone nav-right" id="navNext" aria-label="下一张"><span class="arrow">›</span></div>
   </div>
-</div>
 
-<!-- 预览层（点击图片放大 + 关闭按钮） -->
-<div class="lightbox" id="lightbox" aria-hidden="true">
-  <img id="bigimg" alt="preview" referrerpolicy="no-referrer" />
-  <div class="close-btn" id="closeBtn" aria-label="关闭">×</div>
-</div>
+  <script>
+    /* =================== 可替换数据（示例） =================== */
+    const TITLE_TEXT = '2025-10-03 今日图片';
+    const TIME_TEXT  = '2025-10-03 17:49:42';
 
-<script>
-/* ====================== 可替换参数（保留自参考.html） ====================== */
-const TITLE_TEXT = '2025-10-3 今日图片';   // ← 改这里：标题
-const TIME_TEXT  = '2025-10-3 17:49:42';   // ← 改这里：时间
-const IMAGES = [                           // ← 改这里：图片列表（只放图片）
-  // 示例（请换成你的图床 URL）
-  'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1600',
-  'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1600',
-  'https://images.unsplash.com/photo-1540206276207-3af25c08abc4?w=1600',
-  { src:'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1600', w:1600, h:1045 },
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600',
-  'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=1600',
-  'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1600',
-  'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1600',
-  'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1600',
-  'https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=1600',
-  
-];
-/* ======================================================================= */
+    /* 重要：每项包含 image_url / thumbnail_url / thumbnail_width / thumbnail_height / score */
+    const IMAGES = [
+      {
+        image_url: 'https://example.com/full/a.jpg',
+        thumbnail_url: 'https://example.com/thumb/a_512.jpg',
+        thumbnail_width: 512,
+        thumbnail_height: 341,
+        score: { hentai: 0.02, porn: 0.15, sexy: 0.88 }
+      },
+      {
+        image_url: 'https://example.com/full/b.jpg',
+        thumbnail_url: 'https://example.com/thumb/b_512.jpg',
+        thumbnail_width: 512,
+        thumbnail_height: 640,
+        score: { hentai: 0.01, porn: 0.05, sexy: 0.42 }
+      }
+      // ……把你的真实数据放进来
+    ];
+    /* ======================================================== */
 
-/** ===== 布局参数（沿用你的模板逻辑） =====
- * 如需“初始化一次并固定行高”，可用 FIXED_TARGET_H；
- * 如需“始终按屏幕高度1/4”，改用 computeTargetRowHeight()。
- */
-const options = {
-  gap: 8,
-  targetRowHeight: 220,      // 会被下面的 FIXED_TARGET_H 覆盖（如不需要固定可移除此行）
-  lastRow: 'nojustify',
-  maxScale: 1.8,
-  targetHeightScale: 0.25
-};
-// 固定一次，之后不再随视口高度重算（若不想固定可删掉这两行）
-const FIXED_TARGET_H = Math.max(140, Math.round(window.innerHeight * options.targetHeightScale));
-options.targetRowHeight = FIXED_TARGET_H;
+    /* ===== 标题/时间 & 主题切换 ===== */
+    document.getElementById('pageTitle').textContent = TITLE_TEXT;
+    document.getElementById('time').textContent = TIME_TEXT;
 
-/* ============ 初始化标题与时间（来自参考.html） ============ */
-document.getElementById('pageTitle').textContent = TITLE_TEXT;
-document.getElementById('time').textContent = TIME_TEXT;
+    const root = document.documentElement;
+    const themeBtn = document.getElementById('themeToggle');
 
-/* ============ 主题切换（来自参考.html） ============ */
-const root = document.documentElement;
-const toggleBtn = document.getElementById('themeToggle');
-function applyTheme(theme){
-  root.setAttribute('data-theme', theme);
-  toggleBtn.textContent = (theme === 'dark') ? '☀️' : '🌙';
-  root.style.colorScheme = (theme === 'dark') ? 'dark' : 'light';
-}
-applyTheme(localStorage.getItem('theme-preference') === 'dark' ? 'dark' : 'light');
-toggleBtn.addEventListener('click', ()=>{
-  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  localStorage.setItem('theme-preference', next);
-});
-
-/* ============ 轻量 Lightbox（来自参考.html，适配网格点击） ============ */
-const lb = document.getElementById('lightbox');
-const big = document.getElementById('bigimg');
-const closeBtn = document.getElementById('closeBtn');
-function openLightbox(src){
-  big.src = src;
-  lb.classList.add('open');
-  document.body.classList.add('preview-open');
-  lb.setAttribute('aria-hidden','false');
-  document.body.style.overflow = 'hidden';
-  try{ history.pushState({lb:true}, '', '#preview'); }catch(e){}
-}
-function closeLightbox(){
-  lb.classList.remove('open');
-  document.body.classList.remove('preview-open');
-  lb.setAttribute('aria-hidden','true');
-  big.removeAttribute('src');
-  document.body.style.overflow = '';
-  if (location.hash === '#preview') { try{ history.back(); }catch(e){} }
-}
-lb.addEventListener('click', e=>{ if (e.target === lb) closeLightbox(); });
-closeBtn.addEventListener('click', closeLightbox);
-window.addEventListener('keydown', e=>{ if (e.key==='Escape' && lb.classList.contains('open')) closeLightbox(); });
-window.addEventListener('popstate', ()=>{ if (lb.classList.contains('open')) closeLightbox(); });
-
-/* ===================== 照片墙（你的 Justified 逻辑） ===================== */
-function isObj(x){ return Object.prototype.toString.call(x)==='[object Object]' }
-
-function measureAll(images){
-  // 返回 [{src,w,h,r}, ...]
-  const tasks = images.map(item => {
-    if (isObj(item) && item.w && item.h) {
-      return Promise.resolve({ src:item.src, w:item.w, h:item.h, r:item.w/item.h });
+    function applyTheme(theme) {
+      root.setAttribute('data-theme', theme);
+      themeBtn.textContent = (theme === 'dark') ? '☀️' : '🌙';
+      root.style.colorScheme = (theme === 'dark') ? 'dark' : 'light';
     }
-    const src = isObj(item) ? item.src : item;
-    return new Promise(resolve => {
-      const img = new Image();
-      img.onload = () => resolve({ src, w:img.naturalWidth||1, h:img.naturalHeight||1, r:(img.naturalWidth||1)/(img.naturalHeight||1) });
-      img.onerror = () => resolve({ src, w:1, h:1, r:1 });
-      img.referrerPolicy = 'no-referrer';
-      img.decoding = 'async';
-      img.src = src;
+    applyTheme(localStorage.getItem('theme-preference') === 'dark' ? 'dark' : 'light');
+
+    themeBtn.addEventListener('click', () => {
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      localStorage.setItem('theme-preference', next);
     });
-  });
-  return Promise.all(tasks);
-}
 
-function layoutJustified(metaList, container, opt){
-  const W = container.getBoundingClientRect().width; // 浮点更灵敏
-  const rows = [];
-  let row = [], Rsum = 0;
+    /* ===== 预览层控制 ===== */
+    const lb = document.getElementById('lightbox');
+    const big = document.getElementById('bigimg');
+    const closeBtn = document.getElementById('closeBtn');
 
-  const pushRow = (forceJustify=false, isLast=false) => {
-    if (!row.length) return;
-    const n = row.length;
-    const gaps = opt.gap * (n - 1);
-    let H;
+    let currentIndex = -1;                 // 当前预览在 CURRENT_LIST 中的下标
+    const PRELOAD_CACHE = new Map();       // 预取缓存：url -> Image
+    const PRELOAD_MAX   = 12;              // 最多保留 12 张 —— 如需更多改这里
 
-    if (forceJustify){
-      H = (W - gaps) / Rsum;
-    } else {
-      H = opt.targetRowHeight;
+    function wrapIndex(idx, n) { return ((idx % n) + n) % n; }
+
+    function getFullUrlAt(idx) {
+      const n = CURRENT_LIST.length;
+      if (!n) return '';
+      const it = CURRENT_LIST[wrapIndex(idx, n)];
+      return it?.image_url || it?.full || '';
+    }
+
+    function preloadNeighbors(centerIdx) {
+      const n = CURRENT_LIST.length;
+      if (!n) return;
+
+      const prevIdx = wrapIndex(centerIdx - 1, n);
+      const nextIdx = wrapIndex(centerIdx + 1, n);
+      const urls = [ getFullUrlAt(prevIdx), getFullUrlAt(nextIdx) ];
+
+      for (const url of urls) {
+        if (!url || PRELOAD_CACHE.has(url)) continue;
+        const img = new Image();
+        img.referrerPolicy = 'no-referrer';
+        img.decoding = 'async';
+        img.src = url;                 // 触发浏览器预取
+        PRELOAD_CACHE.set(url, img);
+
+        // 简单 LRU：超过上限就删最早放进去的
+        if (PRELOAD_CACHE.size > PRELOAD_MAX) {
+          const firstKey = PRELOAD_CACHE.keys().next().value;
+          PRELOAD_CACHE.delete(firstKey);
+        }
+      }
+    }
+
+    function showPreviewByIndex(idx) {
+      if (!Array.isArray(CURRENT_LIST) || CURRENT_LIST.length === 0) return;
+
+      // 环绕下标
+      const n = CURRENT_LIST.length;
+      idx = ((idx % n) + n) % n;
+      currentIndex = idx;
+
+      const item = CURRENT_LIST[idx];
+      const full = item?.image_url || item?.full || '';
+      if (!full) return;
+
+      big.src = full;
+      if (!lb.classList.contains('open')) {
+        lb.classList.add('open');
+        document.body.classList.add('preview-open');
+        lb.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        try { history.pushState({ lb: true }, '', '#preview'); } catch (e) {}
+      }
+
+      // 空闲时预取前后各一张（不阻塞当前显示）
+      const task = () => preloadNeighbors(currentIndex);
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(task, { timeout: 500 });
+      } else {
+        setTimeout(task, 0);
+      }
+    }
+
+    function closeLightbox() {
+      lb.classList.remove('open');
+      document.body.classList.remove('preview-open');
+      lb.setAttribute('aria-hidden', 'true');
+      big.removeAttribute('src');
+      document.body.style.overflow = '';
+      currentIndex = -1;
+      if (location.hash === '#preview') {
+        try { history.back(); } catch (e) {}
+      }
+    }
+
+    lb.addEventListener('click', e => { if (e.target === lb) closeLightbox(); });
+    closeBtn.addEventListener('click', closeLightbox);
+    window.addEventListener('keydown', e => { if (e.key === 'Escape' && lb.classList.contains('open')) closeLightbox(); });
+    window.addEventListener('popstate', () => { if (lb.classList.contains('open')) closeLightbox(); });
+
+    function openLightboxByIndex(idx) { showPreviewByIndex(idx); }
+    function prevPreview() { if (currentIndex >= 0) showPreviewByIndex(currentIndex - 1); }
+    function nextPreview() { if (currentIndex >= 0) showPreviewByIndex(currentIndex + 1); }
+
+    /* ===== Justified 布局核心（基于缩略图尺寸） ===== */
+    const options = {
+      gap: 8,
+      // 每行目标高度（像素）。默认取屏高的 25% 与 140 的较大者，可直接改为固定值：
+      // targetRowHeight: 220,  // ← 固定行高示例
+      targetRowHeight: Math.max(140, Math.round(window.innerHeight * 0.25)), // 修改这里
+      lastRow: 'nojustify',    // 最后一行不拉伸
+      maxScale: 1.8            // 非强制对齐行的最高缩放倍率
+    };
+
+    const BATCH_SIZE = 50;     // 每批加载数量（可按需调整）
+
+    let cursor = 0;                 // 当前模式下的加载指针
+    let loadingBatch = false;
+    let allLoadedMetas = [];        // 已渲染的 metas（用于 resize 重排）
+    let carryRow = [];              // 未铺满行（跨批次拼接）
+    let carryRsum = 0;
+    let carryRowEl = null;
+
+    /* —— 模式/排序 —— */
+    const MODES = ['update', 'hentai', 'porn', 'sexy'];
+    let CURRENT_MODE = 'update';
+    const BASE_IMAGES = IMAGES.slice(); // 保持原始顺序
+    let CURRENT_LIST = getListForMode(CURRENT_MODE);
+
+    function getListForMode(mode) {
+      if (mode === 'update') return BASE_IMAGES.slice();
+      const key = mode; // hentai/porn/sexy
+      return BASE_IMAGES
+        .map((it, idx) => ({ it, idx }))
+        .sort((a, b) => {
+          const as = (a.it.score && typeof a.it.score[key] === 'number') ? a.it.score[key] : -Infinity;
+          const bs = (b.it.score && typeof b.it.score[key] === 'number') ? b.it.score[key] : -Infinity;
+          if (bs !== as) return bs - as;  // 分数降序
+          return a.idx - b.idx;           // 稳定排序：分数相等按原顺序
+        })
+        .map(x => x.it);
+    }
+
+    function toMeta(obj, idx) {
+      const tw = Number(obj.thumbnail_width)  || 1;
+      const th = Number(obj.thumbnail_height) || 1;
+      return {
+        idx,                              // ← 全局下标（用于点击打开预览）
+        thumb: obj.thumbnail_url,
+        full:  obj.image_url,
+        w: tw, h: th,
+        r: tw / th,
+        score: obj.score || {},
+        raw: obj
+      };
+    }
+
+    /* —— 渲染单行并追加到容器 —— */
+    function finalizeRow(container, W, row, Rsum, forceJustify, opt) {
+      if (!row.length) return null;
+
+      const n = row.length;
+      const gaps = opt.gap * (n - 1);
+
+      let H = forceJustify ? (W - gaps) / Rsum : opt.targetRowHeight;
       const scale = H / opt.targetRowHeight;
-      if (scale > opt.maxScale) H = opt.targetRowHeight * opt.maxScale;
+      if (!forceJustify && scale > opt.maxScale) H = opt.targetRowHeight * opt.maxScale;
+
+      let widths = row.map(it => Math.round(it.r * H));
+      const total = widths.reduce((a, b) => a + b, 0) + gaps;
+      let diff = Math.round(W - total);
+      if (Math.abs(diff) <= opt.gap + 2 && n > 0) widths[n - 1] += diff; // 像素对齐
+
+      const rowEl = document.createElement('div');
+      rowEl.className = 'row';
+
+      row.forEach((it, i) => {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.width  = widths[i] + 'px';
+        cell.style.height = H + 'px';
+
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.alt = '';
+        img.src = it.thumb;                 // 用缩略图渲染
+        img.referrerPolicy = 'no-referrer';
+
+        cell.addEventListener('click', () => openLightboxByIndex(it.idx)); // 点击看原图
+        cell.appendChild(img);
+        rowEl.appendChild(cell);
+      });
+
+      container.appendChild(rowEl);
+      return rowEl;
     }
 
-    let widths = row.map(it => Math.round(it.r * H));
-    const total = widths.reduce((a,b)=>a+b,0) + gaps;
-    let diff = Math.round(W - total);
-    if (Math.abs(diff) <= opt.gap + 2 && n > 0) {
-      widths[n-1] += diff; // 像素对齐，消缝隙
-      diff = 0;
+    /* —— 增量排版（携带上次未满行） —— */
+    function appendLayoutWithCarry(newMetas) {
+      const container = gallery;
+      const W = container.getBoundingClientRect().width;
+
+      if (carryRowEl) { try { container.removeChild(carryRowEl); } catch (e) {} carryRowEl = null; }
+
+      let row  = carryRow.slice();
+      let Rsum = carryRsum;
+
+      for (const it of newMetas) {
+        row.push(it); Rsum += it.r;
+        const tentative = (Rsum * options.targetRowHeight) + options.gap * (row.length - 1);
+        if (tentative >= W) {
+          finalizeRow(container, W, row, Rsum, true, options);
+          row = []; Rsum = 0;
+        }
+      }
+
+      if (row.length) {
+        carryRow  = row;
+        carryRsum = Rsum;
+        if (options.lastRow !== 'hide') {
+          carryRowEl = finalizeRow(container, W, row, Rsum, false, options);
+        }
+      } else {
+        carryRow = []; carryRsum = 0; carryRowEl = null;
+      }
     }
-    rows.push({ H, widths, items: row.slice(), justify: forceJustify, isLast });
-    row = []; Rsum = 0;
-  };
 
-  for (const it of metaList){
-    const tentative = (Rsum + it.r) * opt.targetRowHeight + opt.gap * row.length;
-    row.push(it); Rsum += it.r;
-    if (tentative >= W) pushRow(true, false);
-  }
+    /* —— 批量加载 —— */
+    async function loadNextBatch() {
+      if (loadingBatch) return;
+      if (cursor >= CURRENT_LIST.length) return;
 
-  if (row.length){
-    if (opt.lastRow === 'justify') pushRow(true, true);
-    else if (opt.lastRow === 'hide') { /* 不渲染 */ }
-    else pushRow(false, true); // 'nojustify' | 'center'
-  }
+      loadingBatch = true;
+      const start = cursor;
+      const count = Math.min(BATCH_SIZE, CURRENT_LIST.length - start);
+      const slice = CURRENT_LIST.slice(start, start + count);
 
-  container.innerHTML = '';
-  for (const r of rows){
-    const rowEl = document.createElement('div');
-    rowEl.className = 'row';
-    if (r.isLast && opt.lastRow === 'center' && !r.justify){
-      rowEl.style.justifyContent = 'center';
+      const metas = slice.map((obj, i) => toMeta(obj, start + i)); // 直接用缩略图尺寸，无需网络测量
+      cursor += count;
+
+      if (loading) { loading.remove(); }
+      allLoadedMetas.push(...metas);
+      appendLayoutWithCarry(metas);
+      loadingBatch = false;
+
+      if (nearBottom() && cursor < CURRENT_LIST.length) {
+        setTimeout(loadNextBatch, 0);
+      }
     }
-    r.items.forEach((it,i) => {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.style.width  = r.widths[i] + 'px';
-      cell.style.height = r.H + 'px';
 
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.alt = '';
-      img.src = it.src;
-      img.referrerPolicy = 'no-referrer';
+    /* —— 工具与事件 —— */
+    function nearBottom() {
+      return (window.scrollY + window.innerHeight) >= (document.documentElement.scrollHeight - 200);
+    }
 
-      // 新增：点击放大预览
-      cell.addEventListener('click', () => openLightbox(it.src));
+    function relayoutAllFromScratch() {
+      const container = gallery;
+      container.innerHTML = '';
+      carryRow = []; carryRsum = 0; carryRowEl = null;
+      if (!allLoadedMetas.length) return;
+      appendLayoutWithCarry(allLoadedMetas);
+    }
 
-      cell.appendChild(img);
-      rowEl.appendChild(cell);
+    function setMode(mode) {
+      if (!MODES.includes(mode)) return;
+      if (lb.classList.contains('open')) closeLightbox();
+      CURRENT_MODE = mode;
+      CURRENT_LIST = getListForMode(mode);
+
+      // 重置所有状态
+      cursor = 0; loadingBatch = false;
+      allLoadedMetas = [];
+      carryRow = []; carryRsum = 0;
+      if (carryRowEl) { try { gallery.removeChild(carryRowEl); } catch (e) {} carryRowEl = null; }
+
+      // 清空并开始新模式加载
+      gallery.innerHTML = '<div class="loading" id="loading">正在加载…</div>';
+      loading = document.getElementById('loading');
+      loadNextBatch();
+      setTimeout(() => { if (nearBottom()) loadNextBatch(); }, 0);
+    }
+
+    /* ---------- 初始化 ---------- */
+    const gallery = document.getElementById('gallery');
+    let   loading = document.getElementById('loading');
+
+    loadNextBatch();
+    setTimeout(() => { if (nearBottom()) loadNextBatch(); }, 0);
+
+    let scrollTick = false;
+    window.addEventListener('scroll', () => {
+      if (scrollTick) return;
+      scrollTick = true;
+      requestAnimationFrame(() => {
+        scrollTick = false;
+        if (nearBottom()) loadNextBatch();
+      });
     });
-    container.appendChild(rowEl);
-  }
-}
 
-/* ---------- 初始化 ---------- */
-const gallery = document.getElementById('gallery');
-const loading = document.getElementById('loading');
-let metas = [];
-let rafToken = 0;
+    let resizeTick = false;
+    window.addEventListener('resize', () => {
+      if (resizeTick) return;
+      resizeTick = true;
+      requestAnimationFrame(() => {
+        resizeTick = false;
+        relayoutAllFromScratch();
+      });
+    });
 
-function doLayout(){ if (metas.length) layoutJustified(metas, gallery, options); }
-function scheduleLayout(){ cancelAnimationFrame(rafToken); rafToken = requestAnimationFrame(doLayout); }
+    // 预览层：左右切换（点击热区 + 键盘左右）
+    document.getElementById('navPrev').addEventListener('click', (e) => { e.stopPropagation(); prevPreview(); });
+    document.getElementById('navNext').addEventListener('click', (e) => { e.stopPropagation(); nextPreview(); });
 
-// 初次测量并渲染
-measureAll(IMAGES).then(list => {
-  metas = list.filter(x => x && x.w > 0 && x.h > 0);
-  loading && loading.remove();
-  // 如需固定行高：使用 FIXED_TARGET_H；如需 1/4 视口高：改为 computeTargetRowHeight()
-  options.targetRowHeight = FIXED_TARGET_H;
-  scheduleLayout();
-});
+    window.addEventListener('keydown', (e) => {
+      if (!lb.classList.contains('open')) return;
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); prevPreview(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); nextPreview(); }
+    });
 
-// 宽度变化时重排（不改行高）
-let ticking = false;
-window.addEventListener('resize', () => {
-  if (!ticking){
-    ticking = true;
-    requestAnimationFrame(() => { ticking = false; scheduleLayout(); });
-  }
-});
-
-// 额外：容器尺寸观察，保证在某些环境下也能及时重排
-try {
-  const ro = new ResizeObserver(() => scheduleLayout());
-  ro.observe(gallery);
-} catch(e) {}
-</script>
+    /* 模式按钮绑定 */
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        if (mode === CURRENT_MODE) return;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        setMode(mode);
+      });
+    });
+  </script>
 </body>
 </html>
