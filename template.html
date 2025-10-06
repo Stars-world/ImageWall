@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>最简洁照片墙（白底 · 全宽 · 行高=屏幕1/4）</title>
+  <style>
+    /* —— 主题变量（来自参考.html，扩展到本模板） —— */
+    :root{
+      --gap: 8px;           /* 图片间距 */
+      --page-x: 12px;       /* 页面左右留白 */
+
+      /* 主题色（亮） */
+      --bg:#ffffff; --fg:#111; --card-bg:#fff; --muted:#666;
+      --overlay-bg:rgba(255,255,255,.92); --overlay-fg:#111;
+      --btn-bg:rgba(0,0,0,.06); --btn-border:rgba(0,0,0,.12);
+    }
+    html[data-theme="dark"]{
+      --bg:#0b0b0b; --fg:#eaeaea; --card-bg:#121212; --muted:#9a9a9a;
+      --overlay-bg:rgba(0,0,0,.85); --overlay-fg:#fff;
+      --btn-bg:rgba(255,255,255,.12); --btn-border:rgba(255,255,255,.18);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+
+    /* 顶部信息区（标题 + 时间 + 主题切换） */
+    .wrap{
+      width:100%;
+      margin:0 auto;
+      padding: 12px var(--page-x);
+    }
+    .topbar{position:relative;display:flex;align-items:center;min-height:36px}
+    .title{ font-size:20px;font-weight:700;letter-spacing:.5px;margin:6px 0 6px;padding-right:56px; }
+    .time{ font-size:14px; color:var(--muted); margin: 2px 0 10px; }
+
+    .theme-toggle{
+      position:absolute;top:0;right:0;width:36px;height:36px;border-radius:999px;
+      background:var(--btn-bg);color:var(--fg);display:grid;place-items:center;
+      font-size:18px;cursor:pointer;user-select:none;border:1px solid var(--btn-border);
+      backdrop-filter:blur(3px);z-index:1;
+    }
+    .theme-toggle:hover{filter:brightness(1.05)}
+
+    /* 照片墙容器 */
+    .gallery{ padding:6px; overflow:hidden; min-height:60px; }
+    .row{ display:flex; gap:var(--gap); margin-bottom:var(--gap); }
+    .row:last-child{ margin-bottom:2px; }
+    .cell{ position:relative; overflow:hidden; border-radius:6px; background:#f3f3f3; flex:0 0 auto; cursor:zoom-in; }
+    .cell img{ width:100%; height:100%; display:block; object-fit:cover; user-select:none; -webkit-user-drag:none; }
+
+    .loading{ padding:20px 0; text-align:center; opacity:.7; }
+
+    /* 预览层（来自参考.html） */
+    .lightbox{
+      position:fixed;inset:0;background:var(--overlay-bg);
+      display:none;align-items:center;justify-content:center;z-index:10000;padding:24px;
+    }
+    .lightbox.open{display:flex}
+    .lightbox img{
+      max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 2px 24px rgba(0,0,0,.6);
+    }
+    .close-btn{
+      position:fixed;top:14px;right:14px;width:36px;height:36px;border-radius:999px;
+      background:transparent;color:var(--overlay-fg);display:grid;place-items:center;
+      font-size:20px;cursor:pointer;user-select:none;border:1px solid rgba(255,255,255,.25);z-index:10001;
+    }
+    .preview-open .theme-toggle{pointer-events:none;opacity:.6}
+
+    @media (max-width:520px){
+      :root{ --gap:6px; --page-x:10px }
+      .wrap{ padding-top:10px }
+      .title{ font-size:18px }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <!-- 顶部：标题 + 主题切换按钮 -->
+  <div class="topbar">
+    <h1 class="title" id="pageTitle">标题占位</h1>
+    <div class="theme-toggle" id="themeToggle" title="切换主题" aria-label="切换主题">🌙</div>
+  </div>
+  <div class="time" id="time">时间占位</div>
+
+  <!-- 照片墙 -->
+  <div id="gallery" class="gallery">
+    <div id="loading" class="loading">正在准备图片尺寸并计算排版…</div>
+  </div>
+</div>
+
+<!-- 预览层（点击图片放大 + 关闭按钮） -->
+<div class="lightbox" id="lightbox" aria-hidden="true">
+  <img id="bigimg" alt="preview" referrerpolicy="no-referrer" />
+  <div class="close-btn" id="closeBtn" aria-label="关闭">×</div>
+</div>
+
+<script>
+/* ====================== 可替换参数（保留自参考.html） ====================== */
+const TITLE_TEXT = '2025-10-3 今日图片';   // ← 改这里：标题
+const TIME_TEXT  = '2025-10-3 17:49:42';   // ← 改这里：时间
+const IMAGES = [                           // ← 改这里：图片列表（只放图片）
+  // 示例（请换成你的图床 URL）
+  'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1600',
+  'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1600',
+  'https://images.unsplash.com/photo-1540206276207-3af25c08abc4?w=1600',
+  { src:'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1600', w:1600, h:1045 },
+  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600',
+  'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=1600',
+  'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1600',
+  'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1600',
+  'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1600',
+  'https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=1600',
+  
+];
+/* ======================================================================= */
+
+/** ===== 布局参数（沿用你的模板逻辑） =====
+ * 如需“初始化一次并固定行高”，可用 FIXED_TARGET_H；
+ * 如需“始终按屏幕高度1/4”，改用 computeTargetRowHeight()。
+ */
+const options = {
+  gap: 8,
+  targetRowHeight: 220,      // 会被下面的 FIXED_TARGET_H 覆盖（如不需要固定可移除此行）
+  lastRow: 'nojustify',
+  maxScale: 1.8,
+  targetHeightScale: 0.25
+};
+// 固定一次，之后不再随视口高度重算（若不想固定可删掉这两行）
+const FIXED_TARGET_H = Math.max(140, Math.round(window.innerHeight * options.targetHeightScale));
+options.targetRowHeight = FIXED_TARGET_H;
+
+/* ============ 初始化标题与时间（来自参考.html） ============ */
+document.getElementById('pageTitle').textContent = TITLE_TEXT;
+document.getElementById('time').textContent = TIME_TEXT;
+
+/* ============ 主题切换（来自参考.html） ============ */
+const root = document.documentElement;
+const toggleBtn = document.getElementById('themeToggle');
+function applyTheme(theme){
+  root.setAttribute('data-theme', theme);
+  toggleBtn.textContent = (theme === 'dark') ? '☀️' : '🌙';
+  root.style.colorScheme = (theme === 'dark') ? 'dark' : 'light';
+}
+applyTheme(localStorage.getItem('theme-preference') === 'dark' ? 'dark' : 'light');
+toggleBtn.addEventListener('click', ()=>{
+  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  localStorage.setItem('theme-preference', next);
+});
+
+/* ============ 轻量 Lightbox（来自参考.html，适配网格点击） ============ */
+const lb = document.getElementById('lightbox');
+const big = document.getElementById('bigimg');
+const closeBtn = document.getElementById('closeBtn');
+function openLightbox(src){
+  big.src = src;
+  lb.classList.add('open');
+  document.body.classList.add('preview-open');
+  lb.setAttribute('aria-hidden','false');
+  document.body.style.overflow = 'hidden';
+  try{ history.pushState({lb:true}, '', '#preview'); }catch(e){}
+}
+function closeLightbox(){
+  lb.classList.remove('open');
+  document.body.classList.remove('preview-open');
+  lb.setAttribute('aria-hidden','true');
+  big.removeAttribute('src');
+  document.body.style.overflow = '';
+  if (location.hash === '#preview') { try{ history.back(); }catch(e){} }
+}
+lb.addEventListener('click', e=>{ if (e.target === lb) closeLightbox(); });
+closeBtn.addEventListener('click', closeLightbox);
+window.addEventListener('keydown', e=>{ if (e.key==='Escape' && lb.classList.contains('open')) closeLightbox(); });
+window.addEventListener('popstate', ()=>{ if (lb.classList.contains('open')) closeLightbox(); });
+
+/* ===================== 照片墙（你的 Justified 逻辑） ===================== */
+function isObj(x){ return Object.prototype.toString.call(x)==='[object Object]' }
+
+function measureAll(images){
+  // 返回 [{src,w,h,r}, ...]
+  const tasks = images.map(item => {
+    if (isObj(item) && item.w && item.h) {
+      return Promise.resolve({ src:item.src, w:item.w, h:item.h, r:item.w/item.h });
+    }
+    const src = isObj(item) ? item.src : item;
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve({ src, w:img.naturalWidth||1, h:img.naturalHeight||1, r:(img.naturalWidth||1)/(img.naturalHeight||1) });
+      img.onerror = () => resolve({ src, w:1, h:1, r:1 });
+      img.referrerPolicy = 'no-referrer';
+      img.decoding = 'async';
+      img.src = src;
+    });
+  });
+  return Promise.all(tasks);
+}
+
+function layoutJustified(metaList, container, opt){
+  const W = container.getBoundingClientRect().width; // 浮点更灵敏
+  const rows = [];
+  let row = [], Rsum = 0;
+
+  const pushRow = (forceJustify=false, isLast=false) => {
+    if (!row.length) return;
+    const n = row.length;
+    const gaps = opt.gap * (n - 1);
+    let H;
+
+    if (forceJustify){
+      H = (W - gaps) / Rsum;
+    } else {
+      H = opt.targetRowHeight;
+      const scale = H / opt.targetRowHeight;
+      if (scale > opt.maxScale) H = opt.targetRowHeight * opt.maxScale;
+    }
+
+    let widths = row.map(it => Math.round(it.r * H));
+    const total = widths.reduce((a,b)=>a+b,0) + gaps;
+    let diff = Math.round(W - total);
+    if (Math.abs(diff) <= opt.gap + 2 && n > 0) {
+      widths[n-1] += diff; // 像素对齐，消缝隙
+      diff = 0;
+    }
+    rows.push({ H, widths, items: row.slice(), justify: forceJustify, isLast });
+    row = []; Rsum = 0;
+  };
+
+  for (const it of metaList){
+    const tentative = (Rsum + it.r) * opt.targetRowHeight + opt.gap * row.length;
+    row.push(it); Rsum += it.r;
+    if (tentative >= W) pushRow(true, false);
+  }
+
+  if (row.length){
+    if (opt.lastRow === 'justify') pushRow(true, true);
+    else if (opt.lastRow === 'hide') { /* 不渲染 */ }
+    else pushRow(false, true); // 'nojustify' | 'center'
+  }
+
+  container.innerHTML = '';
+  for (const r of rows){
+    const rowEl = document.createElement('div');
+    rowEl.className = 'row';
+    if (r.isLast && opt.lastRow === 'center' && !r.justify){
+      rowEl.style.justifyContent = 'center';
+    }
+    r.items.forEach((it,i) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.style.width  = r.widths[i] + 'px';
+      cell.style.height = r.H + 'px';
+
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.alt = '';
+      img.src = it.src;
+      img.referrerPolicy = 'no-referrer';
+
+      // 新增：点击放大预览
+      cell.addEventListener('click', () => openLightbox(it.src));
+
+      cell.appendChild(img);
+      rowEl.appendChild(cell);
+    });
+    container.appendChild(rowEl);
+  }
+}
+
+/* ---------- 初始化 ---------- */
+const gallery = document.getElementById('gallery');
+const loading = document.getElementById('loading');
+let metas = [];
+let rafToken = 0;
+
+function doLayout(){ if (metas.length) layoutJustified(metas, gallery, options); }
+function scheduleLayout(){ cancelAnimationFrame(rafToken); rafToken = requestAnimationFrame(doLayout); }
+
+// 初次测量并渲染
+measureAll(IMAGES).then(list => {
+  metas = list.filter(x => x && x.w > 0 && x.h > 0);
+  loading && loading.remove();
+  // 如需固定行高：使用 FIXED_TARGET_H；如需 1/4 视口高：改为 computeTargetRowHeight()
+  options.targetRowHeight = FIXED_TARGET_H;
+  scheduleLayout();
+});
+
+// 宽度变化时重排（不改行高）
+let ticking = false;
+window.addEventListener('resize', () => {
+  if (!ticking){
+    ticking = true;
+    requestAnimationFrame(() => { ticking = false; scheduleLayout(); });
+  }
+});
+
+// 额外：容器尺寸观察，保证在某些环境下也能及时重排
+try {
+  const ro = new ResizeObserver(() => scheduleLayout());
+  ro.observe(gallery);
+} catch(e) {}
+</script>
+</body>
+</html>
